@@ -6,6 +6,7 @@
 
 import { ConfigManager } from './config-manager';
 import { RuleConfiguration, RuleCondition, RuleAction } from './config.types';
+import { validateRuleConfigSchema } from './rule-config-schema';
 
 export class RuleConfigService {
   private configManager: ConfigManager;
@@ -278,53 +279,15 @@ export class RuleConfigService {
   }
 
   /**
-   * Validate rule configuration
+   * Validate rule configuration against the rule configuration JSON schema
+   * (see src/schemas/rule-config.schema.json).
    */
   validateRule(rule: RuleConfiguration): { valid: boolean; errors: string[] } {
-    const errors: string[] = [];
-
-    if (!rule.id) {
-      errors.push('Rule ID is required');
-    }
-
-    if (!rule.name) {
-      errors.push('Rule name is required');
-    }
-
-    if (typeof rule.enabled !== 'boolean') {
-      errors.push('Rule enabled flag must be boolean');
-    }
-
-    if (!rule.category) {
-      errors.push('Rule category is required');
-    }
-
-    if (!rule.language) {
-      errors.push('Rule language is required');
-    }
-
-    if (!['critical', 'high', 'medium', 'low', 'info'].includes(rule.severity)) {
-      errors.push('Invalid severity level');
-    }
-
-    // Validate custom rules if present
-    if (rule.customRules) {
-      if (!rule.customRules.enabled || typeof rule.customRules.enabled !== 'boolean') {
-        errors.push('Custom rules enabled flag must be boolean');
-      }
-
-      if (!Array.isArray(rule.customRules.conditions)) {
-        errors.push('Custom rules conditions must be an array');
-      }
-
-      if (!Array.isArray(rule.customRules.actions)) {
-        errors.push('Custom rules actions must be an array');
-      }
-    }
+    const result = validateRuleConfigSchema(rule);
 
     return {
-      valid: errors.length === 0,
-      errors,
+      valid: result.valid,
+      errors: result.errors.map((e) => `${e.path}: ${e.message}`),
     };
   }
 
