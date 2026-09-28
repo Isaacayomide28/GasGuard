@@ -17,6 +17,7 @@ import { RbacModule, RolesGuard } from "./rbac";
 import { AuthModule } from "./auth";
 import databaseConfig from "./config/database.config";
 import { AuditModule } from "./audit";
+import { DataRetentionModule } from "./data-retention/data-retention.module";
 import { TransactionsModule } from "./transection/transactions.module";
 import { DashboardModule } from "./dashboard/dashboard.module";
 import { AlertingModule } from "./alerting/alert.module";
@@ -43,6 +44,7 @@ import { StagingParityModule } from "./staging-parity/staging-parity.module";
     PerformanceMonitoringModule,
     GasSubsidyModule,
     AuditModule,
+    DataRetentionModule,
     TransactionsModule,
     DashboardModule,
     AlertingModule,
