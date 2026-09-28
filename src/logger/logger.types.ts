@@ -32,6 +32,9 @@ export interface LogEntry {
   userId?: string;
   sessionId?: string;
   requestId?: string;
+  jobId?: string;
+  repositoryId?: string;
+  analyzerId?: string;
   error?: {
     name: string;
     message: string;
@@ -109,6 +112,13 @@ export interface ILogger {
   fatal(message: string, error?: Error, metadata?: Record<string, any>): void;
   audit(entry: Omit<AuditLogEntry, 'id' | 'timestamp' | 'category'>): Promise<void>;
   setContext(context: Partial<LogEntry>): void;
+  setCorrelationIds(ids: {
+    correlationId?: string;
+    requestId?: string;
+    jobId?: string;
+    repositoryId?: string;
+    analyzerId?: string;
+  }): void;
   clearContext(): void;
   withContext(context: Partial<LogEntry>): ILogger;
 }

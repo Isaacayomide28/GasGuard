@@ -159,6 +159,16 @@ export class LoggerService extends EventEmitter implements ILogger {
     this.context = { ...this.context, ...context };
   }
 
+  setCorrelationIds(ids: {
+    correlationId?: string;
+    requestId?: string;
+    jobId?: string;
+    repositoryId?: string;
+    analyzerId?: string;
+  }): void {
+    this.context = { ...this.context, ...ids };
+  }
+
   clearContext(): void {
     this.context = {};
   }
