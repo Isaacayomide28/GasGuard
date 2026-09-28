@@ -1,16 +1,21 @@
 import { NestFactory } from "@nestjs/core";
 import { VersioningType } from "@nestjs/common";
 import { AppModule } from "./app.module";
+import { gracefulShutdown } from "./queue/index.js";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // Enable API versioning with URI-based strategy
-  // All routes must include /v1/ prefix, unversioned requests return 404
   app.enableVersioning({
     type: VersioningType.URI,
-    // No defaultVersion - unversioned requests will return 404
   });
+
+  gracefulShutdown.registerShutdownHook(async () => {
+    console.log("[API] Closing NestJS application...");
+    await app.close();
+  });
+
+  gracefulShutdown.installSignalHandlers();
 
   const port = process.env.PORT || 3000;
   await app.listen(port);
