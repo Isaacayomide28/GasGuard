@@ -185,4 +185,145 @@ export class AuditEventEmitter {
       outcome: OutcomeStatus.SUCCESS,
     });
   }
+
+  /**
+   * Emit authentication login event
+   */
+  emitAuthLoginEvent(
+    user: string,
+    method: string,
+    ipAddress?: string,
+    details?: Record<string, any>,
+  ): void {
+    this.emitAuditEvent({
+      eventType: EventType.AUTH_LOGIN,
+      user,
+      ipAddress,
+      details: {
+        method,
+        ...details,
+      },
+      outcome: OutcomeStatus.SUCCESS,
+    });
+  }
+
+  /**
+   * Emit authentication logout event
+   */
+  emitAuthLogoutEvent(
+    user: string,
+    details?: Record<string, any>,
+  ): void {
+    this.emitAuditEvent({
+      eventType: EventType.AUTH_LOGOUT,
+      user,
+      details,
+      outcome: OutcomeStatus.SUCCESS,
+    });
+  }
+
+  /**
+   * Emit authentication failed event
+   */
+  emitAuthFailedEvent(
+    user: string,
+    reason: string,
+    ipAddress?: string,
+    details?: Record<string, any>,
+  ): void {
+    this.emitAuditEvent({
+      eventType: EventType.AUTH_FAILED,
+      user,
+      ipAddress,
+      details: {
+        reason,
+        ...details,
+      },
+      outcome: OutcomeStatus.FAILURE,
+    });
+  }
+
+  /**
+   * Emit policy change event
+   */
+  emitPolicyChangeEvent(
+    adminUser: string,
+    policyType: string,
+    changes: Record<string, any>,
+    target?: string,
+  ): void {
+    this.emitAuditEvent({
+      eventType: EventType.POLICY_CHANGE,
+      user: adminUser,
+      details: {
+        policyType,
+        changes,
+        target,
+      },
+      outcome: OutcomeStatus.SUCCESS,
+    });
+  }
+
+  /**
+   * Emit analyzer change event
+   */
+  emitAnalyzerChangeEvent(
+    adminUser: string,
+    analyzerId: string,
+    changeType: string,
+    changes: Record<string, any>,
+  ): void {
+    this.emitAuditEvent({
+      eventType: EventType.ANALYZER_CHANGE,
+      user: adminUser,
+      details: {
+        analyzerId,
+        changeType,
+        changes,
+      },
+      outcome: OutcomeStatus.SUCCESS,
+    });
+  }
+
+  /**
+   * Emit rule suppression event
+   */
+  emitRuleSuppressionEvent(
+    adminUser: string,
+    ruleId: string,
+    reason: string,
+    target?: string,
+  ): void {
+    this.emitAuditEvent({
+      eventType: EventType.RULE_SUPPRESSION,
+      user: adminUser,
+      details: {
+        ruleId,
+        reason,
+        target,
+      },
+      outcome: OutcomeStatus.SUCCESS,
+    });
+  }
+
+  /**
+   * Emit rule unsuppression event
+   */
+  emitRuleUnsuppressionEvent(
+    adminUser: string,
+    ruleId: string,
+    reason: string,
+    target?: string,
+  ): void {
+    this.emitAuditEvent({
+      eventType: EventType.RULE_UNSUPPRESSION,
+      user: adminUser,
+      details: {
+        ruleId,
+        reason,
+        target,
+      },
+      outcome: OutcomeStatus.SUCCESS,
+    });
+  }
 }

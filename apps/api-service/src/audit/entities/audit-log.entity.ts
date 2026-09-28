@@ -13,11 +13,20 @@ export enum EventType {
   API_KEY_REVOKED = "KeyRevoked",
   GAS_TRANSACTION = "GasTransaction",
   GAS_SUBMISSION = "GasSubmission",
+  // Authentication events
+  AUTH_LOGIN = "AuthLogin",
+  AUTH_LOGOUT = "AuthLogout",
+  AUTH_FAILED = "AuthFailed",
   // Admin action events
   CONFIG_UPDATE = "ConfigUpdate",
   ROLE_CHANGE = "RoleChange",
   TREASURY_OPERATION = "TreasuryOperation",
   SYSTEM_ADMIN = "SystemAdmin",
+  // Policy and analyzer events
+  POLICY_CHANGE = "PolicyChange",
+  ANALYZER_CHANGE = "AnalyzerChange",
+  RULE_SUPPRESSION = "RuleSuppression",
+  RULE_UNSUPPRESSION = "RuleUnsuppression",
 }
 
 export enum OutcomeStatus {
