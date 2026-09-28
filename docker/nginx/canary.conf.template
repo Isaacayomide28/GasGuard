@@ -1,0 +1,27 @@
+# Weighted split between the stable and canary API revisions.
+#
+# Rendered by the official nginx image's docker-entrypoint (envsubst-on-templates)
+# at container start, substituting only variables that are actually set in the
+# container's environment (STABLE_WEIGHT, CANARY_WEIGHT) — nginx's own `$host`,
+# `$remote_addr`, etc. are left untouched since they are not env vars.
+#
+# Weights are relative, not percentages of 100: nginx distributes requests
+# proportionally, so STABLE_WEIGHT=95 / CANARY_WEIGHT=5 sends ~5% of traffic
+# to the canary. Changing a weight requires recreating this container
+# (`docker compose up -d nginx-canary`) — see scripts/canary-release.ts.
+upstream gasguard_api_canary_split {
+    server api:3000 weight=${STABLE_WEIGHT} max_fails=3 fail_timeout=10s;
+    server api-canary:3000 weight=${CANARY_WEIGHT} max_fails=3 fail_timeout=10s;
+}
+
+server {
+    listen 80;
+
+    location / {
+        proxy_pass http://gasguard_api_canary_split;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_next_upstream error timeout http_502 http_503 http_504;
+    }
+}

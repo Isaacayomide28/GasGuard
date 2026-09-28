@@ -17,7 +17,8 @@
     "test:regression": "jest --testPathPattern='tests/regression/security/stellar/regression.spec' --no-coverage --verbose",
     "bench:gas-comparator": "ts-node tests/benchmarks/gas-comparator.ts tests/benchmarks/fixtures",
     "test:contracts": "hardhat test",
-    "license:notices": "node scripts/generate-third-party-notices.mjs"
+    "license:notices": "node scripts/generate-third-party-notices.mjs",
+    "canary": "ts-node scripts/canary-release.ts"
   },
   "dependencies": {
     "@nestjs/common": "^10.0.0",
