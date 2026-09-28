@@ -14,6 +14,7 @@
  *   ts-node scripts/canary-release.ts evaluate [--samples=50] [--max-error-rate-delta=0.02] [--max-p95-latency-delta=0.5]
  *   ts-node scripts/canary-release.ts promote
  *   ts-node scripts/canary-release.ts rollback
+ *   ts-node scripts/canary-release.ts revert   (undo an already-promoted release)
  *   ts-node scripts/canary-release.ts status
  */
 import { execSync } from "child_process";
@@ -31,6 +32,7 @@ interface ProbeResult {
   latenciesMs: number[];
   p95LatencyMs: number;
   avgLatencyMs: number;
+  maxConsecutiveFailures: number;
 }
 
 interface RollbackCriteria {
@@ -99,6 +101,7 @@ async function probe(url: string, samples: number): Promise<ProbeResult> {
     p95LatencyMs: percentile(sorted, 95),
     avgLatencyMs:
       latenciesMs.reduce((sum, v) => sum + v, 0) / (latenciesMs.length || 1),
+    maxConsecutiveFailures,
   };
 }
 
@@ -110,6 +113,17 @@ function start(weightPercent: number): void {
     `[canary] Starting canary at ~${canaryWeight}% of traffic ` +
       `(weights: stable=${stableWeight}, canary=${canaryWeight})`,
   );
+
+  // Capture the pre-upgrade image so a rollback is still possible even after
+  // a later `promote` overwrites the `stable` tag — see `revert()`.
+  try {
+    run("docker tag gasguard-api:stable gasguard-api:rollback");
+  } catch {
+    console.log(
+      "[canary] No existing gasguard-api:stable image to snapshot " +
+        "(first deploy?) — skipping rollback snapshot.",
+    );
+  }
 
   process.env.STABLE_WEIGHT = String(stableWeight);
   process.env.CANARY_WEIGHT = String(canaryWeight);
@@ -190,6 +204,12 @@ async function evaluate(args: string[]): Promise<void> {
         `max ${(criteria.maxP95LatencyDelta * 100).toFixed(0)}%`,
     );
   }
+  if (canary.maxConsecutiveFailures > criteria.maxConsecutiveFailures) {
+    failures.push(
+      `canary had ${canary.maxConsecutiveFailures} consecutive failed ` +
+        `probes, exceeding max ${criteria.maxConsecutiveFailures}`,
+    );
+  }
 
   if (failures.length > 0) {
     console.log("[canary] FAIL — rollback criteria breached:");
@@ -221,6 +241,17 @@ function status(): void {
   run("docker compose ps api api-canary nginx-canary");
 }
 
+function revert(): void {
+  console.log(
+    "[canary] Reverting stable to the image captured before the last `start`...",
+  );
+  run("docker tag gasguard-api:rollback gasguard-api:stable");
+  run("docker compose up -d --no-build api");
+  console.log(
+    "[canary] Reverted `api` to the pre-upgrade image. Investigate before retrying.",
+  );
+}
+
 async function main(): Promise<void> {
   const [, , command, ...rest] = process.argv;
 
@@ -240,9 +271,12 @@ async function main(): Promise<void> {
     case "status":
       status();
       break;
+    case "revert":
+      revert();
+      break;
     default:
       console.log(
-        "Usage: ts-node scripts/canary-release.ts <start|evaluate|promote|rollback|status> [args]",
+        "Usage: ts-node scripts/canary-release.ts <start|evaluate|promote|rollback|revert|status> [args]",
       );
       process.exitCode = 1;
   }

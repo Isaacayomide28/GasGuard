@@ -67,6 +67,7 @@ isolation) and compares:
 |---|---|---|
 | Error rate delta (canary − stable) | ≤ 2 percentage points | `--max-error-rate-delta=0.02` |
 | p95 latency delta (canary vs stable) | ≤ 50% slower | `--max-p95-latency-delta=0.5` |
+| Canary's longest streak of consecutive failed probes | ≤ 5 | `--max-consecutive-failures=5` |
 | Sample size | 50 requests per instance | `--samples=50` |
 
 Breaching either threshold is a `FAIL` (non-zero exit code, so it can gate a
@@ -91,6 +92,14 @@ cannot itself introduce a regression on the stable path. `promote` re-tags
 the canary image as `gasguard-api:stable` and recreates `api` from that tag
 (`--no-build`, so it uses the already-built canary image rather than
 rebuilding from source again) before tearing down the canary services.
+
+`start` also snapshots the pre-upgrade image as `gasguard-api:rollback`
+before building the canary. If a regression is only noticed *after*
+`promote` (full rollout, canary infra already torn down), `pnpm run canary
+revert` re-tags that snapshot back onto `gasguard-api:stable` and recreates
+`api` from it — this is the path used by
+[UPGRADE_ROLLBACK_RUNBOOK.md](UPGRADE_ROLLBACK_RUNBOOK.md) for a post-rollout
+rollback.
 
 ## Relationship to the upgrade/rollback runbook
 
