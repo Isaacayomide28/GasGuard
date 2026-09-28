@@ -18,6 +18,9 @@ import { AuthModule } from "./auth";
 import databaseConfig from "./config/database.config";
 import { AuditModule } from "./audit";
 import { TransactionsModule } from "./transection/transactions.module";
+import { DashboardModule } from "./dashboard/dashboard.module";
+import { AlertingModule } from "./alerting/alert.module";
+import { StagingParityModule } from "./staging-parity/staging-parity.module";
 
 @Module({
   imports: [
@@ -41,6 +44,9 @@ import { TransactionsModule } from "./transection/transactions.module";
     GasSubsidyModule,
     AuditModule,
     TransactionsModule,
+    DashboardModule,
+    AlertingModule,
+    StagingParityModule,
   ],
   providers: [
     // Apply RolesGuard globally to enforce RBAC on all routes
