@@ -1,0 +1,34 @@
+[
+  {
+    "id": "reg-cc-001",
+    "name": "Unchecked cross-contract call",
+    "description": "Positive test: cross-contract invocation without return check should be flagged",
+    "ruleId": "detect-unsafe-cross-contract-invocation",
+    "input": "use soroban_sdk::{contract, contractimpl, Address, Env};\n\n#[contractimpl]\nimpl Router {\n    pub fn swap(env: Env, token: Address, amount: i128) {\n        token.invoke(&env, \"transfer\", (&amount,));\n    }\n}",
+    "expected": {
+      "detected": true,
+      "flaggedFunctions": ["swap"]
+    },
+    "metadata": {
+      "category": "cross-contract",
+      "regressionType": "positive",
+      "language": "soroban"
+    }
+  },
+  {
+    "id": "reg-cc-002",
+    "name": "Safe cross-contract call with try",
+    "description": "Negative test: cross-contract invocation wrapped in try should NOT be flagged",
+    "ruleId": "detect-unsafe-cross-contract-invocation",
+    "input": "use soroban_sdk::{contract, contractimpl, Address, Env};\n\n#[contractimpl]\nimpl Router {\n    pub fn swap(env: Env, token: Address, amount: i128) -> Result<(), ()> {\n        token.invoke(&env, \"transfer\", (&amount,)).map_err(|_| ())\n    }\n}",
+    "expected": {
+      "detected": false,
+      "flaggedFunctions": []
+    },
+    "metadata": {
+      "category": "cross-contract",
+      "regressionType": "negative",
+      "language": "soroban"
+    }
+  }
+]

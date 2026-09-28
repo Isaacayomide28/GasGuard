@@ -1,0 +1,50 @@
+[
+  {
+    "id": "reg-sym-001",
+    "name": "Hardcoded symbol string literal",
+    "description": "Positive test: using string literals instead of Symbol::new should be flagged",
+    "ruleId": "detect-inefficient-symbol-usage",
+    "input": "use soroban_sdk::{contract, contractimpl, Env};\n\n#[contractimpl]\nimpl Token {\n    pub fn get_balance(env: Env) -> i128 {\n        env.storage().instance().get(&\"balance\").unwrap_or(0)\n    }\n}",
+    "expected": {
+      "detected": true,
+      "flaggedExpressions": ["\"balance\""]
+    },
+    "metadata": {
+      "category": "optimization",
+      "regressionType": "positive",
+      "language": "soroban"
+    }
+  },
+  {
+    "id": "reg-sym-002",
+    "name": "Correct Symbol::new usage",
+    "description": "Negative test: using Symbol::new should NOT be flagged",
+    "ruleId": "detect-inefficient-symbol-usage",
+    "input": "use soroban_sdk::{contract, contractimpl, symbol_short, Env};\n\n#[contractimpl]\nimpl Token {\n    pub fn get_balance(env: Env) -> i128 {\n        env.storage().instance().get(&symbol_short!(\"balance\")).unwrap_or(0)\n    }\n}",
+    "expected": {
+      "detected": false,
+      "flaggedExpressions": []
+    },
+    "metadata": {
+      "category": "optimization",
+      "regressionType": "negative",
+      "language": "soroban"
+    }
+  },
+  {
+    "id": "reg-sym-003",
+    "name": "Multiple hardcoded symbols",
+    "description": "Positive test: multiple string literals in storage keys should all be flagged",
+    "ruleId": "detect-inefficient-symbol-usage",
+    "input": "use soroban_sdk::{contract, contractimpl, Env};\n\n#[contractimpl]\nimpl Config {\n    pub fn set_value(env: Env, key: &str, val: i128) {\n        env.storage().instance().set(&format!(\"cfg_{}\", key), &val);\n    }\n}",
+    "expected": {
+      "detected": true,
+      "flaggedExpressions": ["\"cfg_{}\""]
+    },
+    "metadata": {
+      "category": "optimization",
+      "regressionType": "positive",
+      "language": "soroban"
+    }
+  }
+]
