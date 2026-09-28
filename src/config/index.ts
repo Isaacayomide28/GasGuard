@@ -386,3 +386,6 @@ export function parseSource(source: string, filePath: string): UnifiedAST {
 export function parseAndSnapshot(source: string, filePath: string): ASTSnapshot {
   return buildSnapshot(parseSource(source, filePath));
 }
+
+// Export staging parity checker
+export { StagingParityChecker, ParityCheckResult, ParityReport } from './staging-parity-check';
