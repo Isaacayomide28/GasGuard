@@ -1,0 +1,32 @@
+{
+  "name": "large-repository-scan",
+  "description": "Simulates scanning a large repository with many contract files",
+  "files": [
+    {
+      "path": "contracts/token/ERC20.sol",
+      "content": "pragma solidity ^0.8.0;\ncontract ERC20 {\n  mapping(address => uint256) private _balances;\n  mapping(address => mapping(address => uint256)) private _allowances;\n  uint256 private _totalSupply;\n  string public name;\n  string public symbol;\n  uint8 public decimals = 18;\n  function totalSupply() public view returns (uint256) { return _totalSupply; }\n  function balanceOf(address account) public view returns (uint256) { return _balances[account]; }\n  function transfer(address to, uint256 amount) public returns (bool) {\n    _balances[msg.sender] -= amount;\n    _balances[to] += amount;\n    return true;\n  }\n}"
+    },
+    {
+      "path": "contracts/token/ERC721.sol",
+      "content": "pragma solidity ^0.8.0;\ncontract ERC721 {\n  mapping(uint256 => address) private _owners;\n  mapping(address => uint256) private _balances;\n  function ownerOf(uint256 tokenId) public view returns (address) { return _owners[tokenId]; }\n  function safeTransferFrom(address from, address to, uint256 tokenId) public {\n    require(_owners[tokenId] == from);\n    _owners[tokenId] = to;\n  }\n}"
+    },
+    {
+      "path": "contracts/vault/Vault.sol",
+      "content": "pragma solidity ^0.8.0;\ncontract Vault {\n  mapping(address => uint256) public balances;\n  function deposit() public payable { balances[msg.sender] += msg.value; }\n  function withdraw(uint256 amount) public {\n    require(balances[msg.sender] >= amount);\n    (bool ok,) = msg.sender.call{value: amount}(\"\");\n    require(ok);\n    balances[msg.sender] -= amount;\n  }\n}"
+    },
+    {
+      "path": "contracts/access/Admin.sol",
+      "content": "pragma solidity ^0.8.0;\ncontract Admin {\n  address public owner;\n  modifier onlyOwner() { require(msg.sender == owner); _; }\n  function setOwner(address newOwner) public onlyOwner { owner = newOwner; }\n}"
+    },
+    {
+      "path": "contracts/utils/SafeMath.sol",
+      "content": "pragma solidity ^0.8.0;\nlibrary SafeMath {\n  function add(uint256 a, uint256 b) internal pure returns (uint256) { return a + b; }\n  function sub(uint256 a, uint256 b) internal pure returns (uint256) { require(b <= a); return a - b; }\n  function mul(uint256 a, uint256 b) internal pure returns (uint256) { return a * b; }\n}"
+    }
+  ],
+  "expectedFindings": 3,
+  "metadata": {
+    "category": "performance",
+    "targetDurationMs": 5000,
+    "targetMemoryMb": 50
+  }
+}

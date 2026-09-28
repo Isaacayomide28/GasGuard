@@ -1,0 +1,34 @@
+[
+  {
+    "id": "reg-ug-001",
+    "name": "Contract without upgrade guard",
+    "description": "Positive test: contract with write_storage but no upgrade guard should be flagged",
+    "ruleId": "detect-missing-upgrade-guards",
+    "input": "use soroban_sdk::{contract, contractimpl, Env};\n\n#[contractimpl]\nimpl MyContract {\n    pub fn update(env: Env, val: i128) {\n        env.storage().instance().set(&\"key\", &val);\n    }\n}",
+    "expected": {
+      "detected": true,
+      "flaggedFunctions": ["update"]
+    },
+    "metadata": {
+      "category": "upgradeability",
+      "regressionType": "positive",
+      "language": "soroban"
+    }
+  },
+  {
+    "id": "reg-ug-002",
+    "name": "Contract with upgrade guard",
+    "description": "Negative test: contract with proper upgrade guard should NOT be flagged",
+    "ruleId": "detect-missing-upgrade-guards",
+    "input": "use soroban_sdk::{contract, contractimpl, Env};\n\n#[contractimpl]\nimpl MyContract {\n    pub fn __constructor(env: Env) {\n        env.storage().instance().set(&\"upgraded\", &true);\n    }\n\n    pub fn update(env: Env, val: i128) {\n        env.storage().instance().set(&\"key\", &val);\n    }\n}",
+    "expected": {
+      "detected": false,
+      "flaggedFunctions": []
+    },
+    "metadata": {
+      "category": "upgradeability",
+      "regressionType": "negative",
+      "language": "soroban"
+    }
+  }
+]
