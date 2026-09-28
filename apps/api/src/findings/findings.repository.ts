@@ -1,0 +1,183 @@
+/**
+ * In-memory findings store with tenant + repository isolation (#992, #996).
+ * Swap for TypeORM/Prisma in production; interface stays the same.
+ */
+
+import {
+  DEFAULT_PAGE_LIMIT,
+  Finding,
+  FindingListPage,
+  FindingListQuery,
+  FindingSeverity,
+  FindingSortField,
+  FindingStatus,
+  MAX_PAGE_LIMIT,
+  SEVERITY_RANK,
+  SortDirection,
+} from './finding.types';
+import { decodeCursor, encodeCursor } from './cursor';
+
+function asArray<T>(v: T | T[] | undefined): T[] | undefined {
+  if (v === undefined) return undefined;
+  return Array.isArray(v) ? v : [v];
+}
+
+function sortKey(f: Finding, field: FindingSortField): string {
+  switch (field) {
+    case 'severity':
+      return String(SEVERITY_RANK[f.severity]).padStart(2, '0');
+    case 'status':
+      return f.status;
+    case 'title':
+      return f.title.toLowerCase();
+    case 'createdAt':
+    default:
+      return f.createdAt;
+  }
+}
+
+function compareFindings(
+  a: Finding,
+  b: Finding,
+  field: FindingSortField,
+  dir: SortDirection,
+): number {
+  const ka = sortKey(a, field);
+  const kb = sortKey(b, field);
+  let cmp = ka < kb ? -1 : ka > kb ? 1 : 0;
+  if (cmp === 0) {
+    cmp = a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+  }
+  return dir === 'desc' ? -cmp : cmp;
+}
+
+/** True when `item` is strictly after the cursor position in sort order. */
+function isAfterCursor(
+  item: Finding,
+  field: FindingSortField,
+  dir: SortDirection,
+  cursorKey: string,
+  cursorId: string,
+): boolean {
+  const itemKey = sortKey(item, field);
+  if (dir === 'asc') {
+    if (itemKey > cursorKey) return true;
+    if (itemKey < cursorKey) return false;
+    return item.id > cursorId;
+  }
+  // desc
+  if (itemKey < cursorKey) return true;
+  if (itemKey > cursorKey) return false;
+  return item.id < cursorId;
+}
+
+export class FindingsRepository {
+  private readonly byId = new Map<string, Finding>();
+
+  clear(): void {
+    this.byId.clear();
+  }
+
+  upsert(finding: Finding): Finding {
+    this.byId.set(finding.id, finding);
+    return finding;
+  }
+
+  upsertMany(findings: Finding[]): void {
+    for (const f of findings) this.upsert(f);
+  }
+
+  getById(id: string): Finding | undefined {
+    return this.byId.get(id);
+  }
+
+  /**
+   * Tenant-scoped get: returns undefined if the finding exists but belongs to
+   * another organization (no existence oracle across tenants).
+   */
+  getForTenant(id: string, organizationId: string): Finding | undefined {
+    const f = this.byId.get(id);
+    if (!f || f.organizationId !== organizationId) return undefined;
+    return f;
+  }
+
+  list(query: FindingListQuery): FindingListPage {
+    if (!query.organizationId) {
+      throw Object.assign(new Error('organizationId is required'), {
+        code: 'VALIDATION_ERROR',
+        status: 400,
+      });
+    }
+
+    const sortBy: FindingSortField = query.sortBy ?? 'createdAt';
+    const sortDir: SortDirection = query.sortDir ?? 'desc';
+    const limit = Math.min(
+      Math.max(1, query.limit ?? DEFAULT_PAGE_LIMIT),
+      MAX_PAGE_LIMIT,
+    );
+
+    const severities = asArray(query.severity);
+    const statuses = asArray(query.status);
+    const q = query.q?.trim().toLowerCase();
+
+    let rows = Array.from(this.byId.values()).filter(
+      (f) => f.organizationId === query.organizationId,
+    );
+
+    if (query.repositoryId) {
+      rows = rows.filter((f) => f.repositoryId === query.repositoryId);
+    }
+    if (query.analysisJobId) {
+      rows = rows.filter((f) => f.analysisJobId === query.analysisJobId);
+    }
+    if (severities?.length) {
+      const set = new Set(severities);
+      rows = rows.filter((f) => set.has(f.severity));
+    }
+    if (statuses?.length) {
+      const set = new Set(statuses);
+      rows = rows.filter((f) => set.has(f.status));
+    }
+    if (query.ruleId) {
+      rows = rows.filter((f) => f.ruleId === query.ruleId);
+    }
+    if (q) {
+      rows = rows.filter(
+        (f) =>
+          f.title.toLowerCase().includes(q) ||
+          f.description.toLowerCase().includes(q) ||
+          (f.filePath?.toLowerCase().includes(q) ?? false),
+      );
+    }
+
+    rows.sort((a, b) => compareFindings(a, b, sortBy, sortDir));
+
+    if (query.cursor) {
+      const cursor = decodeCursor(query.cursor);
+      rows = rows.filter((f) =>
+        isAfterCursor(f, sortBy, sortDir, cursor.k, cursor.id),
+      );
+    }
+
+    const pageItems = rows.slice(0, limit);
+    let nextCursor: string | null = null;
+    if (rows.length > limit && pageItems.length > 0) {
+      const last = pageItems[pageItems.length - 1];
+      nextCursor = encodeCursor({
+        v: 1,
+        k: sortKey(last, sortBy),
+        id: last.id,
+      });
+    }
+
+    return {
+      items: pageItems,
+      nextCursor,
+      totalEstimate: rows.length + (query.cursor ? limit : 0), // approximate when cursor used
+      limit,
+    };
+  }
+}
+
+/** Process-wide singleton for non-DI call sites / tests. */
+export const findingsRepository = new FindingsRepository();
