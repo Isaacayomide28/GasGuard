@@ -243,6 +243,11 @@ impl PipelineExecutor {
             all_violations.extend(violations);
         }
 
+        all_violations.sort_by(|a, b| {
+            a.line_number
+                .cmp(&b.line_number)
+                .then(a.rule_name.cmp(&b.rule_name))
+        });
         Ok(all_violations)
     }
 }
@@ -265,6 +270,11 @@ impl RuleEngine {
         for rule in &self.rules {
             violations.extend(rule.check(ast));
         }
+        violations.sort_by(|a, b| {
+            a.line_number
+                .cmp(&b.line_number)
+                .then(a.rule_name.cmp(&b.rule_name))
+        });
         violations
     }
 

@@ -277,3 +277,94 @@ jobs:
 
       - name: Run Stellar security regression tests
         run: pnpm jest --testPathPattern="tests/regression/security/stellar/regression.spec" --no-coverage
+
+  secret-scanning:
+    name: Secret Scanning
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  dependency-audit:
+    name: Dependency & Supply-Chain Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 10.10.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install Node dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run npm audit
+        run: pnpm audit --audit-level=high
+        continue-on-error: true
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+
+      - name: Run cargo audit
+        run: cargo audit
+        continue-on-error: true
+
+  artifact-checksums:
+    name: Artifact Checksums
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 10.10.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build project
+        run: pnpm run build || true
+
+      - name: Generate SHA-256 checksums
+        run: |
+          find dist -type f -exec sha256sum {} \; > SHA256SUMS 2>/dev/null || true
+          find libs -name "*.wasm" -exec sha256sum {} \; >> SHA256SUMS 2>/dev/null || true
+          find target -name "*.so" -o -name "*.dylib" -o -name "*.dll" | head -100 | xargs sha256sum >> SHA256SUMS 2>/dev/null || true
+          if [ -s SHA256SUMS ]; then
+            echo "Generated checksums:"
+            cat SHA256SUMS
+          else
+            echo "# No artifacts found to checksum" > SHA256SUMS
+          fi
+
+      - name: Upload checksums
+        uses: actions/upload-artifact@v4
+        with:
+          name: sha256-checksums
+          path: SHA256SUMS

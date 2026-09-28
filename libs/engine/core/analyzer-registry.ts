@@ -201,6 +201,21 @@ export class AnalyzerRegistry {
     }
 
     const allFindings = results.flatMap((r) => r.findings);
+    allFindings.sort((a, b) => {
+      const sevOrder: Record<string, number> = {
+        critical: 0,
+        high: 1,
+        medium: 2,
+        low: 3,
+        info: 4,
+      };
+      return (
+        (sevOrder[a.severity] ?? 5) - (sevOrder[b.severity] ?? 5) ||
+        a.file.localeCompare(b.file) ||
+        (a.line ?? 0) - (b.line ?? 0) ||
+        a.rule.localeCompare(b.rule)
+      );
+    });
     const allErrors = results.flatMap((r) => r.errors || []);
     const totalFiles = results.reduce((sum, r) => sum + r.filesAnalyzed, 0);
     const totalTime = results.reduce((sum, r) => sum + r.analysisTime, 0);
