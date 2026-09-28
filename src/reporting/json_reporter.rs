@@ -25,7 +25,7 @@ pub struct ReportSummary {
     pub total_violations: usize,
     pub total_gas_savings: u64,
     pub by_severity: SeverityBreakdown,
-    pub by_rule: std::collections::HashMap<String, usize>,
+    pub by_rule: std::collections::BTreeMap<String, usize>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -84,7 +84,15 @@ impl JsonReporter {
         let by_severity = self.calculate_severity_breakdown(findings);
         let by_rule = self.calculate_rule_breakdown(findings);
 
-        let report_findings = findings.iter()
+        let mut sorted_findings = findings.to_vec();
+        sorted_findings.sort_by(|a, b| {
+            a.file
+                .cmp(&b.file)
+                .then(a.line.cmp(&b.line))
+                .then(a.rule_id.cmp(&b.rule_id))
+        });
+
+        let report_findings = sorted_findings.iter()
             .map(|f| self.convert_finding(f))
             .collect();
 
@@ -157,8 +165,8 @@ impl JsonReporter {
         breakdown
     }
 
-    fn calculate_rule_breakdown(&self, findings: &[Finding]) -> std::collections::HashMap<String, usize> {
-        let mut breakdown = std::collections::HashMap::new();
+    fn calculate_rule_breakdown(&self, findings: &[Finding]) -> std::collections::BTreeMap<String, usize> {
+        let mut breakdown = std::collections::BTreeMap::new();
         
         for finding in findings {
             *breakdown.entry(finding.rule_id.clone()).or_insert(0) += 1;

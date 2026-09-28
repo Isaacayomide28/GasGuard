@@ -75,14 +75,24 @@ impl PluginRegistry {
     pub fn run_session(&mut self, inputs: &[AnalysisInput]) -> SessionOutput {
         let mut session = SessionOutput::default();
 
+        // Collect rule IDs and sort for deterministic iteration order
+        let mut rule_ids: Vec<String> = self.rules.keys().cloned().collect();
+        rule_ids.sort();
+
         // Phase 1 – start
-        for rule in self.rules.values_mut() {
-            rule.on_start();
+        for id in &rule_ids {
+            if let Some(rule) = self.rules.get_mut(id.as_str()) {
+                rule.on_start();
+            }
         }
 
         // Phase 2 – per-file analysis
         for input in inputs {
-            for rule in self.rules.values() {
+            for id in &rule_ids {
+                let rule = match self.rules.get(id.as_str()) {
+                    Some(r) => r,
+                    None => continue,
+                };
                 let applicable = rule
                     .meta()
                     .languages
@@ -110,16 +120,20 @@ impl PluginRegistry {
         }
 
         // Phase 3 – end (cross-file findings)
-        for rule in self.rules.values_mut() {
-            let cross_file = rule.on_end();
-            if !cross_file.is_empty() {
-                session.push(AnalysisOutput::ok(rule.meta().id, "<session>", cross_file));
+        for id in &rule_ids {
+            if let Some(rule) = self.rules.get_mut(id.as_str()) {
+                let cross_file = rule.on_end();
+                if !cross_file.is_empty() {
+                    session.push(AnalysisOutput::ok(rule.meta().id, "<session>", cross_file));
+                }
             }
         }
 
         // Phase 4 – teardown
-        for rule in self.rules.values_mut() {
-            rule.on_teardown();
+        for id in &rule_ids {
+            if let Some(rule) = self.rules.get_mut(id.as_str()) {
+                rule.on_teardown();
+            }
         }
 
         session
