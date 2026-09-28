@@ -1,0 +1,30 @@
+# Issue #995 – block destructive migrations unless explicitly approved
+name: Migration Safety
+
+on:
+  push:
+    paths:
+      - "apps/**/migrations/**"
+      - "scripts/check-migrations.mjs"
+      - ".github/workflows/migration-safety.yml"
+  pull_request:
+    paths:
+      - "apps/**/migrations/**"
+      - "scripts/check-migrations.mjs"
+
+jobs:
+  migration-safety:
+    name: Migration Safety
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Run migration safety checks
+        run: node scripts/check-migrations.mjs
+
+      - name: Unit tests for analyzer
+        run: node --test scripts/check-migrations.test.mjs

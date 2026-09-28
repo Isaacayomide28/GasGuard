@@ -36,3 +36,4 @@ export {
   REDIS_KEY_PREFIXES,
   RATE_LIMIT_HEADERS,
 } from "./schemas/rate-limit.schema";
+export { ScopedRateLimitService } from "./services/scoped-rate-limit.service";

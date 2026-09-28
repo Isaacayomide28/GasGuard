@@ -7,6 +7,7 @@
 
 import { Module, Global, DynamicModule } from "@nestjs/common";
 import { RateLimitService } from "./services/rate-limit.service";
+import { ScopedRateLimitService } from "./services/scoped-rate-limit.service";
 import { RedisService } from "./services/redis.service";
 import { RateLimitGuard } from "./guards/rate-limit.guard";
 import { RateLimitAdminController } from "./controllers/admin.controller";
@@ -43,9 +44,15 @@ export class RateLimitingModule {
         },
         RedisService,
         RateLimitService,
+        ScopedRateLimitService,
         RateLimitGuard,
       ],
-      exports: [RateLimitService, RateLimitGuard, RedisService],
+      exports: [
+        RateLimitService,
+        ScopedRateLimitService,
+        RateLimitGuard,
+        RedisService,
+      ],
     };
   }
 
@@ -80,9 +87,15 @@ export class RateLimitingModule {
         },
         RedisService,
         RateLimitService,
+        ScopedRateLimitService,
         RateLimitGuard,
       ],
-      exports: [RateLimitService, RateLimitGuard, RedisService],
+      exports: [
+        RateLimitService,
+        ScopedRateLimitService,
+        RateLimitGuard,
+        RedisService,
+      ],
     };
   }
 }
