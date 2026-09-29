@@ -1,0 +1,20 @@
+{
+  "schemaVersion": "1",
+  "name": "production",
+  "version": "1.0.0",
+  "description": "Fail the build when a scan reports a high or critical finding.",
+  "mode": "enforce",
+  "gates": {
+    "minSeverity": "high",
+    "maxFindings": 0,
+    "maxFindingsBySeverity": {
+      "critical": 0,
+      "high": 0
+    },
+    "paths": ["contracts/**", "packages/**", "apps/**"]
+  },
+  "scope": {
+    "include": ["**/*.rs", "**/*.sol", "**/*.vy"],
+    "exclude": ["target/**", "node_modules/**", "dist/**"]
+  }
+}
