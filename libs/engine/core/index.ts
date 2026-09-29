@@ -12,3 +12,13 @@ export type {
 export { Language, Severity, BaseAnalyzer } from "./analyzer-interface";
 
 export { AnalyzerRegistry } from "./analyzer-registry";
+
+// Analyzer timeout diagnostics (#1019)
+export * from "./analyzer-timeout";
+export * from "./analyzer-runner";
+
+// Rule deprecation lifecycle (#1024)
+export * from "./rule-lifecycle";
+
+// Analyzer compatibility matrix (#1025)
+export * from "./compatibility-matrix";
