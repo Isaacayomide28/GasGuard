@@ -18,6 +18,14 @@ export interface Finding {
   ruleId: string;
   filePath?: string;
   line?: number;
+  /** Current assignee (user/team/module) (#1035). */
+  assignedTo?: string;
+  /** Actor who performed the last assignment/reassignment (#1035). */
+  assignedBy?: string;
+  /** ISO timestamp of the last reassignment (#1035). */
+  reassignedAt?: string;
+  /** Total number of times this finding has been reassigned (#1035). */
+  reassignmentCount?: number;
   createdAt: string; // ISO
   updatedAt: string;
 }
@@ -29,6 +37,7 @@ export interface FindingListQuery {
   organizationId: string;
   repositoryId?: string;
   analysisJobId?: string;
+  assignedTo?: string;
   severity?: FindingSeverity | FindingSeverity[];
   status?: FindingStatus | FindingStatus[];
   ruleId?: string;
@@ -43,6 +52,37 @@ export interface FindingListQuery {
    * Encodes sort key + id so pages do not skip/duplicate under inserts.
    */
   cursor?: string;
+}
+
+export interface ReassignFindingInput {
+  organizationId: string;
+  findingId: string;
+  newAssignee: string;
+  reassignedBy: string;
+  reason: string;
+  expectedPreviousAssignee?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface BatchReassignInput {
+  organizationId: string;
+  findingIds: string[];
+  newAssignee: string;
+  reassignedBy: string;
+  reason: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ReassignmentAuditRecord {
+  id: string;
+  findingId: string;
+  organizationId: string;
+  previousAssignee?: string;
+  newAssignee: string;
+  reassignedBy: string;
+  reason: string;
+  timestamp: string; // ISO
+  metadata?: Record<string, unknown>;
 }
 
 export interface FindingListPage {
