@@ -1,0 +1,52 @@
+name: Scheduled Gas Scan
+
+on:
+  schedule:
+    # Run every day at 02:00 UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Target contract path or directory'
+        required: false
+        default: './contracts'
+      profile:
+        description: 'Gas profiling strictness level'
+        required: false
+        default: 'default'
+
+jobs:
+  scheduled-scan:
+    name: Run Scheduled Gas Audit
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Execute GasGuard Scan
+        env:
+          TARGET_PATH: ${{ github.event.inputs.target || './contracts' }}
+          GAS_PROFILE: ${{ github.event.inputs.profile || 'default' }}
+        run: |
+          echo "Starting scheduled gas scan for target: $TARGET_PATH with profile: $GAS_PROFILE"
+          npx gasguard scan --target "$TARGET_PATH" --profile "$GAS_PROFILE" --report-json scan-report.json
+
+      - name: Archive Scan Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: scheduled-scan-report
+          path: scan-report.json
+          retention-days: 30
