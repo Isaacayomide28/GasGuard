@@ -18,7 +18,8 @@
     "bench:gas-comparator": "ts-node tests/benchmarks/gas-comparator.ts tests/benchmarks/fixtures",
     "test:contracts": "hardhat test",
     "license:notices": "node scripts/generate-third-party-notices.mjs",
-    "canary": "ts-node scripts/canary-release.ts"
+    "canary": "ts-node scripts/canary-release.ts",
+    "policy:validate": "ts-node scripts/policy-validate.ts"
   },
   "dependencies": {
     "@nestjs/common": "^10.0.0",

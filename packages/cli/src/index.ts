@@ -7,6 +7,7 @@ import { scanCommand } from "./commands/scan";
 import { initCommand } from "./commands/init";
 import { configCommand } from "./commands/config";
 import { versionCommand } from "./commands/version";
+import { policyCommand } from "./commands/policy";
 
 const program = new Command();
 
@@ -32,6 +33,7 @@ program.addCommand(scanCommand);
 program.addCommand(initCommand);
 program.addCommand(configCommand);
 program.addCommand(versionCommand);
+program.addCommand(policyCommand);
 
 // Handle unknown commands
 program.on("command:*", () => {

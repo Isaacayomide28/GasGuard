@@ -157,6 +157,14 @@ Every release (mainnet cut or later patch) follows [RELEASE_CHECKLIST.md](RELEAS
 The one-time mainnet launch blocker list is tracked separately in
 [PRODUCTION_READINESS_REVIEW.md](PRODUCTION_READINESS_REVIEW.md).
 
+### Policy documents
+
+Build-gate policy files are JSON documents validated by `npm run policy:validate`
+(or `gasguard policy validate` in the TypeScript CLI). The checked-in
+production policy is `config/policies/production.policy.json`. Use `--strict`
+in CI so omitted defaults cannot pass. The command checks the document only;
+it does not scan contracts. See [POLICY_VALIDATION.md](POLICY_VALIDATION.md).
+
 ## Security
 
 - **Rate limiting**: global IP-based limiting via `@nestjs/throttler` (`RATE_LIMIT_TTL`/`RATE_LIMIT_MAX`), plus per-user/per-repository scoped limits in `apps/api/src/rate-limiting/services/scoped-rate-limit.service.ts` with an internal bypass mechanism gated by `INTERNAL_BYPASS_TOKENS`.
@@ -175,6 +183,8 @@ The one-time mainnet launch blocker list is tracked separately in
 | Legitimate internal service getting 429s | Scoped rate limit hit and no bypass token supplied | Set `X-GasGuard-Internal-Token` to a value listed in `INTERNAL_BYPASS_TOKENS` |
 | CLI reports no findings on a file you expect findings for | Rule is disabled via `.gasguardrc` `ignoreRules`, path is in `excludePaths`, or `severityThreshold` is filtering it out | Check the resolved config: `loadConfig()` output, and confirm the rule ID isn't in `ignoreRules` |
 | Migration blocked in CI | Migration contains a destructive pattern (`DROP TABLE`, `TRUNCATE`, unconditional `DELETE`, etc.) | Either fix the migration or set `ALLOW_DESTRUCTIVE_MIGRATIONS=true` deliberately after review — see [MIGRATION_SAFETY.md](MIGRATION_SAFETY.md) |
+| `policy:validate` exits 1 | The policy JSON failed schema checks, or `--strict` promoted a warning | Read the `[code]` on stdout. Field rules and the warning list are in [POLICY_VALIDATION.md](POLICY_VALIDATION.md) |
+| `policy:validate` exits 2 | The file was missing, not JSON, or over 256 KiB | Confirm the path ends in `.json`. YAML is rejected on purpose |
 
 ## Known implementation gaps
 
