@@ -19,6 +19,7 @@ import {
   ConfigurationExport
 } from './config.types';
 import { validateRuleConfigSchema } from './rule-config-schema';
+import { validateOrganizationPolicies } from './policy';
 
 export class ConfigManager extends EventEmitter {
   private static instance: ConfigManager;
@@ -320,6 +321,15 @@ export class ConfigManager extends EventEmitter {
           });
         }
       });
+    }
+
+    if (config.policies !== undefined) {
+      const policyResult = validateOrganizationPolicies(
+        config.policies,
+        new Set((config.rules ?? []).map((rule) => rule.id)),
+      );
+      errors.push(...policyResult.errors);
+      warnings.push(...policyResult.warnings);
     }
 
     return {
