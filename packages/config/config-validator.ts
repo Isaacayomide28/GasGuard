@@ -12,6 +12,7 @@ import {
   ValidationError,
   ValidationWarning,
 } from "../../src/config/config.types";
+import { validateOrganizationPolicies } from "../../src/config/policy";
 
 export class ConfigValidator {
   /**
@@ -39,6 +40,15 @@ export class ConfigValidator {
     // Validate profiles
     if (config.profiles) {
       this.validateProfiles(config.profiles, errors, warnings);
+    }
+
+    if (config.policies !== undefined) {
+      const policyResult = validateOrganizationPolicies(
+        config.policies,
+        new Set(config.rules.map((rule) => rule.id)),
+      );
+      errors.push(...policyResult.errors);
+      warnings.push(...policyResult.warnings);
     }
 
     return {

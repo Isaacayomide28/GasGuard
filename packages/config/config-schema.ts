@@ -38,6 +38,13 @@ export const CONFIGURATION_SCHEMA = {
       },
       description: "Configuration profiles for different use cases",
     },
+    policies: {
+      type: "array",
+      items: {
+        $ref: "#/definitions/OrganizationPolicy",
+      },
+      description: "Organization policies with optional parent inheritance",
+    },
   },
   definitions: {
     SystemConfiguration: {
@@ -336,6 +343,28 @@ export const CONFIGURATION_SCHEMA = {
           $ref: "#/definitions/SystemConfiguration",
           description: "System configuration overrides",
         },
+      },
+    },
+    OrganizationPolicy: {
+      type: "object",
+      required: ["id", "organizationId", "rules"],
+      properties: {
+        id: { type: "string", minLength: 1 },
+        organizationId: { type: "string", minLength: 1 },
+        parentPolicyId: { type: "string", minLength: 1 },
+        rules: {
+          type: "array",
+          items: { $ref: "#/definitions/PolicyRuleOverride" },
+        },
+      },
+    },
+    PolicyRuleOverride: {
+      type: "object",
+      required: ["ruleId", "enabled"],
+      properties: {
+        ruleId: { type: "string", minLength: 1 },
+        enabled: { type: "boolean" },
+        severity: { type: "string", enum: ["critical", "high", "medium", "low", "info"] },
       },
     },
   },

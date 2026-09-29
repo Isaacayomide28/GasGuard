@@ -17,6 +17,8 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import type { OrganizationPolicy } from './config.types';
+import { validateOrganizationPolicies } from './policy';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -47,6 +49,7 @@ export interface GasGuardConfigFile {
   system: SystemConfig;
   rules: RuleConfig[];
   profiles?: ProfileConfig[];
+  policies?: OrganizationPolicy[];
 }
 
 export interface SystemConfig {
@@ -153,6 +156,18 @@ export function validateConfig(raw: unknown): ValidationResult {
   validateRules(config.rules, errors, warnings);
   if (config.profiles !== undefined) {
     validateProfiles(config.profiles, errors, warnings);
+  }
+  if (config.policies !== undefined) {
+    const ruleIds = new Set(
+      Array.isArray(config.rules)
+        ? config.rules
+            .map((rule) => (rule && typeof rule === 'object' ? (rule as Record<string, unknown>).id : undefined))
+            .filter((id): id is string => typeof id === 'string')
+        : [],
+    );
+    const policyResult = validateOrganizationPolicies(config.policies, ruleIds);
+    errors.push(...policyResult.errors);
+    warnings.push(...policyResult.warnings);
   }
 
   return { valid: errors.length === 0, errors, warnings };

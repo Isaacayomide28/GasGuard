@@ -69,6 +69,20 @@ export interface ConfigurationFile {
   system: SystemConfiguration;
   rules: RuleConfiguration[];
   profiles?: ConfigurationProfile[];
+  policies?: OrganizationPolicy[];
+}
+
+export interface OrganizationPolicy {
+  id: string;
+  organizationId: string;
+  parentPolicyId?: string;
+  rules: PolicyRuleOverride[];
+}
+
+export interface PolicyRuleOverride {
+  ruleId: string;
+  enabled: boolean;
+  severity?: 'critical' | 'high' | 'medium' | 'low' | 'info';
 }
 
 export interface ConfigurationProfile {
