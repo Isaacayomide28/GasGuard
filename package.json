@@ -3,10 +3,10 @@
   "private": true,
   "scripts": {
     "prepare": "husky install",
-    "build": "tsc -b 2>&1 || true",
+    "build": "node api.js && tsc -b 2>&1 || true",
     "build:engine": "tsc -p libs/engine/tsconfig.json",
     "build:api": "nest build",
-    "start": "nest start",
+    "start": "node api.js && nest start",
     "start:dev": "nest start --watch",
     "start:prod": "node dist/apps/api/main",
     "lint": "eslint \"{apps,libs,packages}/**/*.ts\" --fix",
