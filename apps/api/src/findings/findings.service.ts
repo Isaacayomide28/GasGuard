@@ -80,6 +80,103 @@ export class FindingsService {
   getForTenant(id: string, organizationId: string): Finding | undefined {
     return this.repo.getForTenant(id, organizationId);
   }
+
+  reassign(input: import('./finding.types').ReassignFindingInput): {
+    finding: Finding;
+    record: import('./finding.types').ReassignmentAuditRecord;
+  } {
+    if (!input.organizationId || !input.organizationId.trim()) {
+      throw Object.assign(new Error('organizationId is required'), {
+        code: 'VALIDATION_ERROR',
+        status: 400,
+      });
+    }
+    if (!input.findingId || !input.findingId.trim()) {
+      throw Object.assign(new Error('findingId is required'), {
+        code: 'VALIDATION_ERROR',
+        status: 400,
+      });
+    }
+    if (!input.newAssignee || !input.newAssignee.trim()) {
+      throw Object.assign(new Error('newAssignee is required'), {
+        code: 'VALIDATION_ERROR',
+        status: 400,
+      });
+    }
+    if (!input.reassignedBy || !input.reassignedBy.trim()) {
+      throw Object.assign(new Error('reassignedBy is required'), {
+        code: 'VALIDATION_ERROR',
+        status: 400,
+      });
+    }
+    if (!input.reason || input.reason.trim().length < 5) {
+      throw Object.assign(
+        new Error('Reassignment reason must be at least 5 characters'),
+        { code: 'VALIDATION_ERROR', status: 400 },
+      );
+    }
+    return this.repo.reassign(input);
+  }
+
+  batchReassign(input: import('./finding.types').BatchReassignInput): {
+    total: number;
+    successful: number;
+    failed: number;
+    records: import('./finding.types').ReassignmentAuditRecord[];
+    errors: Array<{ findingId: string; error: string; code: string }>;
+  } {
+    if (!input.findingIds || !Array.isArray(input.findingIds) || input.findingIds.length === 0) {
+      throw Object.assign(new Error('findingIds array is required and must not be empty'), {
+        code: 'VALIDATION_ERROR',
+        status: 400,
+      });
+    }
+    if (input.findingIds.length > 100) {
+      throw Object.assign(new Error('Batch size cannot exceed 100 findings'), {
+        code: 'VALIDATION_ERROR',
+        status: 400,
+      });
+    }
+
+    const records: import('./finding.types').ReassignmentAuditRecord[] = [];
+    const errors: Array<{ findingId: string; error: string; code: string }> = [];
+
+    for (const findingId of input.findingIds) {
+      try {
+        const { record } = this.reassign({
+          organizationId: input.organizationId,
+          findingId,
+          newAssignee: input.newAssignee,
+          reassignedBy: input.reassignedBy,
+          reason: input.reason,
+          metadata: input.metadata,
+        });
+        records.push(record);
+      } catch (err) {
+        const e = err as { code?: string; message?: string };
+        errors.push({
+          findingId,
+          error: e.message ?? 'Unknown error',
+          code: e.code ?? 'INTERNAL_ERROR',
+        });
+      }
+    }
+
+    return {
+      total: input.findingIds.length,
+      successful: records.length,
+      failed: errors.length,
+      records,
+      errors,
+    };
+  }
+
+  getReassignmentHistory(
+    findingId: string,
+    organizationId: string,
+  ): import('./finding.types').ReassignmentAuditRecord[] {
+    return this.repo.getReassignmentHistory(findingId, organizationId);
+  }
 }
 
 export const findingsService = new FindingsService();

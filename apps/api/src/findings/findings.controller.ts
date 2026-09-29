@@ -152,6 +152,112 @@ export class FindingsController {
       });
     }
   }
+
+  reassignOne(req: Request, res: Response): void {
+    try {
+      const organizationId =
+        (req.headers['x-organization-id'] as string) ||
+        (req.body?.organizationId as string);
+      if (!organizationId) {
+        res.status(400).json({
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'organizationId is required',
+          },
+        });
+        return;
+      }
+
+      const { newAssignee, reassignedBy, reason, expectedPreviousAssignee, metadata } = req.body ?? {};
+      const result = findingsService.reassign({
+        organizationId,
+        findingId: req.params.id,
+        newAssignee,
+        reassignedBy,
+        reason,
+        expectedPreviousAssignee,
+        metadata,
+      });
+
+      res.status(200).json({ data: result });
+    } catch (err) {
+      const e = err as { status?: number; code?: string; message?: string };
+      res.status(e.status ?? 500).json({
+        error: {
+          code: e.code ?? 'INTERNAL_ERROR',
+          message: e.message ?? 'Unexpected error',
+        },
+      });
+    }
+  }
+
+  reassignBatch(req: Request, res: Response): void {
+    try {
+      const organizationId =
+        (req.headers['x-organization-id'] as string) ||
+        (req.body?.organizationId as string);
+      if (!organizationId) {
+        res.status(400).json({
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'organizationId is required',
+          },
+        });
+        return;
+      }
+
+      const { findingIds, newAssignee, reassignedBy, reason, metadata } = req.body ?? {};
+      const result = findingsService.batchReassign({
+        organizationId,
+        findingIds,
+        newAssignee,
+        reassignedBy,
+        reason,
+        metadata,
+      });
+
+      res.status(200).json({ data: result });
+    } catch (err) {
+      const e = err as { status?: number; code?: string; message?: string };
+      res.status(e.status ?? 500).json({
+        error: {
+          code: e.code ?? 'INTERNAL_ERROR',
+          message: e.message ?? 'Unexpected error',
+        },
+      });
+    }
+  }
+
+  getHistory(req: Request, res: Response): void {
+    try {
+      const organizationId =
+        (req.headers['x-organization-id'] as string) ||
+        (req.query.organizationId as string);
+      if (!organizationId) {
+        res.status(400).json({
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'organizationId is required',
+          },
+        });
+        return;
+      }
+
+      const history = findingsService.getReassignmentHistory(
+        req.params.id,
+        organizationId,
+      );
+      res.status(200).json({ data: history });
+    } catch (err) {
+      const e = err as { status?: number; code?: string; message?: string };
+      res.status(e.status ?? 500).json({
+        error: {
+          code: e.code ?? 'INTERNAL_ERROR',
+          message: e.message ?? 'Unexpected error',
+        },
+      });
+    }
+  }
 }
 
 export const findingsController = new FindingsController();

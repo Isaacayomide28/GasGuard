@@ -138,6 +138,9 @@ export class FindingsRepository {
       const set = new Set(statuses);
       rows = rows.filter((f) => set.has(f.status));
     }
+    if (query.assignedTo) {
+      rows = rows.filter((f) => f.assignedTo === query.assignedTo);
+    }
     if (query.ruleId) {
       rows = rows.filter((f) => f.ruleId === query.ruleId);
     }
@@ -176,6 +179,82 @@ export class FindingsRepository {
       totalEstimate: rows.length + (query.cursor ? limit : 0), // approximate when cursor used
       limit,
     };
+  }
+
+  private readonly auditHistory = new Map<string, import('./finding.types').ReassignmentAuditRecord[]>();
+
+  reassign(
+    input: import('./finding.types').ReassignFindingInput,
+  ): { finding: Finding; record: import('./finding.types').ReassignmentAuditRecord } {
+    const finding = this.getForTenant(input.findingId, input.organizationId);
+    if (!finding) {
+      throw Object.assign(new Error('Finding not found'), {
+        code: 'NOT_FOUND',
+        status: 404,
+      });
+    }
+
+    const trimmedNew = input.newAssignee.trim();
+    if (finding.assignedTo && finding.assignedTo.trim() === trimmedNew) {
+      throw Object.assign(
+        new Error(`Finding is already assigned to '${trimmedNew}'`),
+        { code: 'ALREADY_ASSIGNED', status: 409 },
+      );
+    }
+
+    if (
+      input.expectedPreviousAssignee !== undefined &&
+      finding.assignedTo !== undefined &&
+      input.expectedPreviousAssignee.trim() !== finding.assignedTo.trim()
+    ) {
+      throw Object.assign(
+        new Error(
+          `Reassignment failed: expected previous assignee '${input.expectedPreviousAssignee}', but finding is currently assigned to '${finding.assignedTo}'`,
+        ),
+        { code: 'CONCURRENCY_CONFLICT', status: 409 },
+      );
+    }
+
+    const now = new Date().toISOString();
+    const record: import('./finding.types').ReassignmentAuditRecord = {
+      id: `reas_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 9)}`,
+      findingId: finding.id,
+      organizationId: finding.organizationId,
+      previousAssignee: finding.assignedTo,
+      newAssignee: trimmedNew,
+      reassignedBy: input.reassignedBy.trim(),
+      reason: input.reason.trim(),
+      timestamp: now,
+      metadata: input.metadata,
+    };
+
+    finding.assignedTo = trimmedNew;
+    finding.assignedBy = input.reassignedBy.trim();
+    finding.reassignedAt = now;
+    finding.reassignmentCount = (finding.reassignmentCount ?? 0) + 1;
+    finding.updatedAt = now;
+
+    this.upsert(finding);
+
+    const history = this.auditHistory.get(finding.id) ?? [];
+    history.push(record);
+    this.auditHistory.set(finding.id, history);
+
+    return { finding, record };
+  }
+
+  getReassignmentHistory(
+    findingId: string,
+    organizationId: string,
+  ): import('./finding.types').ReassignmentAuditRecord[] {
+    const finding = this.getForTenant(findingId, organizationId);
+    if (!finding) {
+      return [];
+    }
+    const history = this.auditHistory.get(findingId) ?? [];
+    return [...history].sort(
+      (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+    );
   }
 }
 
