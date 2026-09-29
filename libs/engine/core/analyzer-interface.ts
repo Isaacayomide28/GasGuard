@@ -246,34 +246,38 @@ export abstract class BaseAnalyzer implements Analyzer {
   ): boolean {
     const cfg = config || this.config;
 
-    if (cfg.excludePaths) {
-      for (const pattern of cfg.excludePaths) {
-        if (this.matchesPattern(filePath, pattern)) {
-          return false;
-        }
-      }
-    }
-
     if (cfg.includePaths && cfg.includePaths.length > 0) {
-      let matches = false;
-      for (const pattern of cfg.includePaths) {
-        if (this.matchesPattern(filePath, pattern)) {
-          matches = true;
-          break;
-        }
+      if (!cfg.includePaths.some((pattern) => this.matchesPattern(filePath, pattern))) {
+        return false;
       }
-      return matches;
     }
 
-    return true;
+    // Rules are evaluated in declaration order. A later match wins and a
+    // leading `!` re-includes a path ignored by an earlier rule.
+    let ignored = false;
+    for (const rawPattern of cfg.excludePaths ?? []) {
+      const negated = rawPattern.startsWith("!");
+      const pattern = negated ? rawPattern.slice(1) : rawPattern;
+      if (pattern && this.matchesPattern(filePath, pattern)) {
+        ignored = !negated;
+      }
+    }
+    return !ignored;
   }
 
   private matchesPattern(path: string, pattern: string): boolean {
-    // Simple implementation - can be enhanced with glob patterns
-    if (pattern.includes("*")) {
-      const regex = new RegExp(pattern.replace(/\*/g, ".*"));
-      return regex.test(path);
-    }
-    return path.includes(pattern);
+    const normalizedPath = path.replace(/\\/g, "/").replace(/^\.\//, "");
+    const normalizedPattern = pattern.replace(/\\/g, "/").replace(/^\.\//, "");
+    const anchored = normalizedPattern.startsWith("/");
+    const source = normalizedPattern
+      .replace(/^\//, "")
+      .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+      .replace(/\*\*/g, "\u0000")
+      .replace(/\*/g, "[^/]*")
+      .replace(/\?/g, "[^/]")
+      .replace(/\u0000/g, ".*");
+    return new RegExp(`${anchored ? "^" : "(?:^|.*/)"}${source}(?:$|/)`).test(
+      normalizedPath,
+    );
   }
 }
