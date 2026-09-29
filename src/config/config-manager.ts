@@ -18,6 +18,7 @@ import {
   ConfigurationChange,
   ConfigurationExport
 } from './config.types';
+import { validateRuleConfigSchema } from './rule-config-schema';
 
 export class ConfigManager extends EventEmitter {
   private static instance: ConfigManager;
@@ -145,7 +146,15 @@ export class ConfigManager extends EventEmitter {
     }
 
     const oldRule = { ...this.config.rules[ruleIndex] };
-    this.config.rules[ruleIndex] = { ...oldRule, ...updates };
+    const mergedRule = { ...oldRule, ...updates };
+
+    const schemaValidation = validateRuleConfigSchema(mergedRule);
+    if (!schemaValidation.valid) {
+      this.emit('ruleValidationFailed', { ruleId, errors: schemaValidation.errors });
+      return false;
+    }
+
+    this.config.rules[ruleIndex] = mergedRule;
     this.config.lastUpdated = new Date();
 
     const change: ConfigurationChange = {
@@ -164,6 +173,12 @@ export class ConfigManager extends EventEmitter {
 
   async addRule(rule: RuleConfiguration): Promise<boolean> {
     if (this.config.rules.some(r => r.id === rule.id)) {
+      return false;
+    }
+
+    const schemaValidation = validateRuleConfigSchema(rule);
+    if (!schemaValidation.valid) {
+      this.emit('ruleValidationFailed', { ruleId: rule.id, errors: schemaValidation.errors });
       return false;
     }
 
