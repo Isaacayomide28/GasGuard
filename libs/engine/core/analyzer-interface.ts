@@ -117,6 +117,9 @@ export interface Analyzer {
 
   getSupportedLanguages(): Language[];
 
+  /** Names of analyzers that must run before this analyzer. */
+  getDependencies?(): string[];
+
   getRules(): Rule[];
 
   getRule(ruleId: string): Rule | undefined;
