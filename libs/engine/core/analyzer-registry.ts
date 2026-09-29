@@ -65,6 +65,50 @@ export class AnalyzerRegistry {
     return Array.from(this.analyzers.values());
   }
 
+  /**
+   * Return analyzers in stable dependency order. Registration order is used
+   * to break ties, making execution deterministic across runs.
+   */
+  getAnalyzersInDependencyOrder(
+    analyzers: Analyzer[] = this.getAllAnalyzers(),
+  ): Analyzer[] {
+    const selected = new Map(analyzers.map((analyzer) => [analyzer.getName(), analyzer]));
+    const ordered: Analyzer[] = [];
+    const visited = new Set<string>();
+    const visiting: string[] = [];
+
+    const visit = (analyzer: Analyzer): void => {
+      const name = analyzer.getName();
+      if (visited.has(name)) return;
+
+      const cycleStart = visiting.indexOf(name);
+      if (cycleStart !== -1) {
+        throw new Error(
+          `Circular analyzer dependency: ${[...visiting.slice(cycleStart), name].join(" -> ")}`,
+        );
+      }
+
+      visiting.push(name);
+      for (const dependencyName of analyzer.getDependencies?.() ?? []) {
+        const dependency = this.analyzers.get(dependencyName);
+        if (!dependency) {
+          throw new Error(
+            `Analyzer "${name}" depends on unregistered analyzer "${dependencyName}"`,
+          );
+        }
+        // A language-specific run only includes dependencies that participate
+        // in that run; global initialization still validates every dependency.
+        if (selected.has(dependencyName)) visit(dependency);
+      }
+      visiting.pop();
+      visited.add(name);
+      ordered.push(analyzer);
+    };
+
+    for (const analyzer of analyzers) visit(analyzer);
+    return ordered;
+  }
+
   getSupportedLanguages(): Array<Language | string> {
     return Array.from(this.languageMap.keys());
   }
@@ -88,11 +132,9 @@ export class AnalyzerRegistry {
   }
 
   async initializeAll(config?: AnalyzerConfig): Promise<void> {
-    const promises = Array.from(this.analyzers.values()).map((analyzer) =>
-      analyzer.initialize(config),
-    );
-
-    await Promise.all(promises);
+    for (const analyzer of this.getAnalyzersInDependencyOrder()) {
+      await analyzer.initialize(config);
+    }
   }
 
   async disposeAll(): Promise<void> {
@@ -127,7 +169,9 @@ export class AnalyzerRegistry {
       }
       analyzers = [analyzer];
     } else {
-      analyzers = this.getAnalyzersForLanguage(language);
+      analyzers = this.getAnalyzersInDependencyOrder(
+        this.getAnalyzersForLanguage(language),
+      );
       if (analyzers.length === 0) {
         throw new Error(`No analyzer found for language "${language}"`);
       }
@@ -137,9 +181,10 @@ export class AnalyzerRegistry {
       return analyzers[0]!.analyze(code, filePath, config);
     }
 
-    const results = await Promise.all(
-      analyzers.map((analyzer) => analyzer.analyze(code, filePath, config)),
-    );
+    const results: AnalysisResult[] = [];
+    for (const analyzer of analyzers) {
+      results.push(await analyzer.analyze(code, filePath, config));
+    }
     return this.mergeResults(results);
   }
 
@@ -170,7 +215,9 @@ export class AnalyzerRegistry {
     const allResults: AnalysisResult[] = [];
 
     for (const [language, languageFiles] of filesByLanguage.entries()) {
-      const analyzers = this.getAnalyzersForLanguage(language);
+      const analyzers = this.getAnalyzersInDependencyOrder(
+        this.getAnalyzersForLanguage(language),
+      );
 
       for (const analyzer of analyzers) {
         const result = await analyzer.analyzeMultiple(languageFiles, config);
