@@ -4,6 +4,9 @@ import {
   AnalysisResult,
   AnalyzerConfig,
   Rule,
+  AnalyzerCapabilities,
+  MemoryUsage,
+  IncrementalAnalysisStats,
 } from "./analyzer-interface";
 
 export class AnalyzerRegistry {
@@ -72,7 +75,9 @@ export class AnalyzerRegistry {
   getAnalyzersInDependencyOrder(
     analyzers: Analyzer[] = this.getAllAnalyzers(),
   ): Analyzer[] {
-    const selected = new Map(analyzers.map((analyzer) => [analyzer.getName(), analyzer]));
+    const selected = new Map(
+      analyzers.map((analyzer) => [analyzer.getName(), analyzer]),
+    );
     const ordered: Analyzer[] = [];
     const visited = new Set<string>();
     const visiting: string[] = [];
@@ -107,6 +112,71 @@ export class AnalyzerRegistry {
 
     for (const analyzer of analyzers) visit(analyzer);
     return ordered;
+  }
+
+  /**
+   * Discover capabilities across all registered analyzers.
+   */
+  discoverCapabilities(): Map<string, AnalyzerCapabilities> {
+    const capabilities = new Map<string, AnalyzerCapabilities>();
+    for (const [name, analyzer] of this.analyzers.entries()) {
+      capabilities.set(
+        name,
+        analyzer.getCapabilities?.() ?? {
+          batchAnalysis: true,
+          languages: analyzer.getSupportedLanguages(),
+        },
+      );
+    }
+    return capabilities;
+  }
+
+  /**
+   * Get declared capabilities of a registered analyzer.
+   */
+  getCapabilities(analyzerName: string): AnalyzerCapabilities | undefined {
+    const analyzer = this.getAnalyzer(analyzerName);
+    if (!analyzer) {
+      return undefined;
+    }
+    return (
+      analyzer.getCapabilities?.() ?? {
+        batchAnalysis: true,
+        languages: analyzer.getSupportedLanguages(),
+      }
+    );
+  }
+
+  /**
+   * Check whether a registered analyzer supports a given capability.
+   */
+  hasCapability(
+    analyzerName: string,
+    capability: keyof AnalyzerCapabilities,
+  ): boolean {
+    const caps = this.getCapabilities(analyzerName);
+    return !!(caps && caps[capability]);
+  }
+
+  /**
+   * Find all registered analyzers that provide a specific capability.
+   */
+  findAnalyzersByCapability(
+    capability: keyof AnalyzerCapabilities,
+  ): Analyzer[] {
+    return this.getAllAnalyzers().filter((analyzer) => {
+      const caps = analyzer.getCapabilities?.();
+      return !!(caps && caps[capability]);
+    });
+  }
+
+  /**
+   * Clear file-level caches across all registered analyzers.
+   */
+  clearAllCaches(): void {
+    for (const analyzer of this.analyzers.values()) {
+      analyzer.clearCache?.();
+    }
   }
 
   getSupportedLanguages(): Array<Language | string> {
@@ -155,6 +225,13 @@ export class AnalyzerRegistry {
     config?: AnalyzerConfig,
     analyzerName?: string,
   ): Promise<AnalysisResult> {
+    const startMemory =
+      config?.reportMemoryUsage &&
+      typeof process !== "undefined" &&
+      process.memoryUsage
+        ? process.memoryUsage()
+        : undefined;
+
     let analyzers: Analyzer[];
 
     if (analyzerName) {
@@ -177,15 +254,35 @@ export class AnalyzerRegistry {
       }
     }
 
+    let result: AnalysisResult;
     if (analyzers.length === 1) {
-      return analyzers[0]!.analyze(code, filePath, config);
+      result = await analyzers[0]!.analyze(code, filePath, config);
+    } else {
+      const results: AnalysisResult[] = [];
+      for (const analyzer of analyzers) {
+        results.push(await analyzer.analyze(code, filePath, config));
+      }
+      result = this.mergeResults(results);
     }
 
-    const results: AnalysisResult[] = [];
-    for (const analyzer of analyzers) {
-      results.push(await analyzer.analyze(code, filePath, config));
+    if (
+      config?.reportMemoryUsage &&
+      startMemory &&
+      typeof process !== "undefined" &&
+      process.memoryUsage &&
+      !result.memoryUsage
+    ) {
+      const current = process.memoryUsage();
+      result.memoryUsage = {
+        heapUsed: current.heapUsed,
+        heapTotal: current.heapTotal,
+        rss: current.rss,
+        external: current.external,
+        delta: current.heapUsed - startMemory.heapUsed,
+      };
     }
-    return this.mergeResults(results);
+
+    return result;
   }
 
   async analyzeMultiple(
@@ -194,6 +291,12 @@ export class AnalyzerRegistry {
     config?: AnalyzerConfig,
   ): Promise<AnalysisResult> {
     const startTime = Date.now();
+    const startMemory =
+      config?.reportMemoryUsage &&
+      typeof process !== "undefined" &&
+      process.memoryUsage
+        ? process.memoryUsage()
+        : undefined;
 
     // Group files by language
     const filesByLanguage = new Map<Language | string, Map<string, string>>();
@@ -229,7 +332,40 @@ export class AnalyzerRegistry {
     const mergedResult = this.mergeResults(allResults);
     mergedResult.analysisTime = Date.now() - startTime;
 
+    if (
+      config?.reportMemoryUsage &&
+      startMemory &&
+      typeof process !== "undefined" &&
+      process.memoryUsage &&
+      !mergedResult.memoryUsage
+    ) {
+      const current = process.memoryUsage();
+      mergedResult.memoryUsage = {
+        heapUsed: current.heapUsed,
+        heapTotal: current.heapTotal,
+        rss: current.rss,
+        external: current.external,
+        delta: current.heapUsed - startMemory.heapUsed,
+      };
+    }
+
     return mergedResult;
+  }
+
+  /**
+   * Convenience method to analyze only changed files.
+   */
+  async analyzeChangedFiles(
+    files: Map<string, string>,
+    changedFiles: string[],
+    languageMap: Map<string, Language | string>,
+    config?: AnalyzerConfig,
+  ): Promise<AnalysisResult> {
+    return this.analyzeMultiple(files, languageMap, {
+      ...config,
+      changedFilesOnly: true,
+      changedFiles,
+    });
   }
 
   private mergeResults(results: AnalysisResult[]): AnalysisResult {
@@ -256,13 +392,21 @@ export class AnalyzerRegistry {
         low: 3,
         info: 4,
       };
+      const fileA = a.location?.file ?? (a as any).file ?? "";
+      const fileB = b.location?.file ?? (b as any).file ?? "";
+      const lineA = a.location?.startLine ?? (a as any).line ?? 0;
+      const lineB = b.location?.startLine ?? (b as any).line ?? 0;
+      const ruleA = a.ruleId ?? (a as any).rule ?? "";
+      const ruleB = b.ruleId ?? (b as any).rule ?? "";
+
       return (
         (sevOrder[a.severity] ?? 5) - (sevOrder[b.severity] ?? 5) ||
-        a.file.localeCompare(b.file) ||
-        (a.line ?? 0) - (b.line ?? 0) ||
-        a.rule.localeCompare(b.rule)
+        fileA.localeCompare(fileB) ||
+        lineA - lineB ||
+        ruleA.localeCompare(ruleB)
       );
     });
+
     const allErrors = results.flatMap((r) => r.errors || []);
     const totalFiles = results.reduce((sum, r) => sum + r.filesAnalyzed, 0);
     const totalTime = results.reduce((sum, r) => sum + r.analysisTime, 0);
@@ -270,6 +414,45 @@ export class AnalyzerRegistry {
       (sum, r) => sum + (r.totalEstimatedGasSavings || 0),
       0,
     );
+
+    let memoryUsage: MemoryUsage | undefined;
+    const resultsWithMem = results.filter((r) => r.memoryUsage);
+    if (resultsWithMem.length > 0) {
+      memoryUsage = {
+        heapUsed: Math.max(
+          ...resultsWithMem.map((r) => r.memoryUsage!.heapUsed),
+        ),
+        heapTotal: Math.max(
+          ...resultsWithMem.map((r) => r.memoryUsage!.heapTotal),
+        ),
+        rss: Math.max(...resultsWithMem.map((r) => r.memoryUsage!.rss)),
+        external: Math.max(
+          ...resultsWithMem.map((r) => r.memoryUsage!.external ?? 0),
+        ),
+        delta: resultsWithMem.reduce(
+          (sum, r) => sum + (r.memoryUsage!.delta ?? 0),
+          0,
+        ),
+      };
+    }
+
+    let incremental: IncrementalAnalysisStats | undefined;
+    const resultsWithInc = results.filter((r) => r.incremental);
+    if (resultsWithInc.length > 0) {
+      incremental = {
+        cachedFiles: resultsWithInc.reduce(
+          (sum, r) => sum + r.incremental!.cachedFiles,
+          0,
+        ),
+        analyzedFiles: resultsWithInc.reduce(
+          (sum, r) => sum + r.incremental!.analyzedFiles,
+          0,
+        ),
+        totalFiles: Math.max(
+          ...resultsWithInc.map((r) => r.incremental!.totalFiles),
+        ),
+      };
+    }
 
     return {
       findings: allFindings,
@@ -286,6 +469,8 @@ export class AnalyzerRegistry {
       totalEstimatedGasSavings:
         totalGasSavings > 0 ? totalGasSavings : undefined,
       errors: allErrors.length > 0 ? allErrors : undefined,
+      memoryUsage,
+      incremental,
     };
   }
 }

@@ -7,6 +7,10 @@ export type {
   AnalysisResult,
   Finding,
   Rule,
+  AnalyzerCapabilities,
+  MemoryUsage,
+  IncrementalAnalysisStats,
+  FileAnalysisCacheEntry,
 } from "./analyzer-interface";
 
 export { Language, Severity, BaseAnalyzer } from "./analyzer-interface";

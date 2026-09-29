@@ -46,6 +46,54 @@ export interface Rule {
   };
 }
 
+export interface AnalyzerCapabilities {
+  /** Supports incremental file-level analysis with caching */
+  incremental?: boolean;
+  /** Supports restricting analysis to changed files */
+  changedFilesOnly?: boolean;
+  /** Supports reporting memory usage metrics */
+  memoryReporting?: boolean;
+  /** Supports analyzing multiple files in batches */
+  batchAnalysis?: boolean;
+  /** Supports providing suggested fixes */
+  quickFix?: boolean;
+  /** Supports configurable rules */
+  configurableRules?: boolean;
+  /** Languages supported by this analyzer */
+  languages?: Language[];
+  /** Arbitrary analyzer capabilities */
+  [key: string]: any;
+}
+
+export interface MemoryUsage {
+  /** Heap memory used in bytes */
+  heapUsed: number;
+  /** Total heap memory allocated in bytes */
+  heapTotal: number;
+  /** Resident Set Size in bytes */
+  rss: number;
+  /** External memory in bytes */
+  external?: number;
+  /** Net change in heap used during execution in bytes */
+  delta?: number;
+}
+
+export interface IncrementalAnalysisStats {
+  /** Number of files served from cache without re-analysis */
+  cachedFiles: number;
+  /** Number of files that had to be analyzed */
+  analyzedFiles: number;
+  /** Total number of files evaluated */
+  totalFiles: number;
+}
+
+export interface FileAnalysisCacheEntry {
+  hash: string;
+  findings: Finding[];
+  totalEstimatedGasSavings?: number;
+  timestamp: number;
+}
+
 export interface AnalyzerConfig {
   rules?: {
     [ruleId: string]:
@@ -61,6 +109,18 @@ export interface AnalyzerConfig {
   includePaths?: string[];
   maxFindings?: number;
   options?: Record<string, any>;
+
+  /** When true, report memory usage in the analysis result */
+  reportMemoryUsage?: boolean;
+
+  /** When true, use incremental file-level caching to skip unchanged files */
+  incremental?: boolean;
+
+  /** When true, restrict analysis to changed files */
+  changedFilesOnly?: boolean;
+
+  /** Explicit list of changed file paths to analyze when changedFilesOnly is true */
+  changedFiles?: string[];
 }
 
 export interface AnalysisResult {
@@ -85,6 +145,12 @@ export interface AnalysisResult {
     message: string;
     error?: Error;
   }>;
+
+  /** Memory usage stats during analysis (when reportMemoryUsage is true) */
+  memoryUsage?: MemoryUsage;
+
+  /** Incremental analysis stats (when incremental is true) */
+  incremental?: IncrementalAnalysisStats;
 }
 
 export enum Language {
@@ -120,6 +186,9 @@ export interface Analyzer {
   /** Names of analyzers that must run before this analyzer. */
   getDependencies?(): string[];
 
+  /** Discovers or returns capabilities supported by this analyzer. */
+  getCapabilities?(): AnalyzerCapabilities;
+
   getRules(): Rule[];
 
   getRule(ruleId: string): Rule | undefined;
@@ -129,11 +198,15 @@ export interface Analyzer {
   initialize(config?: AnalyzerConfig): Promise<void>;
 
   dispose(): Promise<void>;
+
+  /** Clears any cached file analysis entries */
+  clearCache?(): void;
 }
 
 export abstract class BaseAnalyzer implements Analyzer {
   protected config: AnalyzerConfig = {};
   protected initialized = false;
+  protected fileCache: Map<string, FileAnalysisCacheEntry> = new Map();
 
   abstract getName(): string;
   abstract getVersion(): string;
@@ -146,20 +219,113 @@ export abstract class BaseAnalyzer implements Analyzer {
   abstract getSupportedLanguages(): Language[];
   abstract getRules(): Rule[];
 
+  getCapabilities(): AnalyzerCapabilities {
+    return {
+      batchAnalysis: true,
+      incremental: true,
+      changedFilesOnly: true,
+      memoryReporting: true,
+      quickFix: false,
+      configurableRules: true,
+      languages: this.getSupportedLanguages(),
+    };
+  }
+
+  clearCache(): void {
+    this.fileCache.clear();
+  }
+
+  getCacheSize(): number {
+    return this.fileCache.size;
+  }
+
+  protected computeHash(content: string): string {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const crypto = require("crypto");
+      return crypto.createHash("sha256").update(content).digest("hex");
+    } catch {
+      let hash = 5381;
+      for (let i = 0; i < content.length; i++) {
+        hash = ((hash << 5) + hash) ^ content.charCodeAt(i);
+      }
+      return (hash >>> 0).toString(16);
+    }
+  }
+
+  protected captureMemoryUsage(startMemory?: {
+    heapUsed: number;
+    heapTotal: number;
+    rss: number;
+    external?: number;
+  }): MemoryUsage | undefined {
+    if (typeof process === "undefined" || !process.memoryUsage) {
+      return undefined;
+    }
+    const current = process.memoryUsage();
+    return {
+      heapUsed: current.heapUsed,
+      heapTotal: current.heapTotal,
+      rss: current.rss,
+      external: current.external,
+      delta: startMemory ? current.heapUsed - startMemory.heapUsed : undefined,
+    };
+  }
+
+  protected normalizePath(p: string): string {
+    return p.replace(/\\/g, "/").replace(/^\.\//, "");
+  }
+
   async analyzeMultiple(
     files: Map<string, string>,
     config?: AnalyzerConfig,
   ): Promise<AnalysisResult> {
+    const cfg = config || this.config;
     const startTime = Date.now();
+    const startMemory =
+      cfg.reportMemoryUsage &&
+      typeof process !== "undefined" &&
+      process.memoryUsage
+        ? process.memoryUsage()
+        : undefined;
+
     const allFindings: Finding[] = [];
     const errors: Array<{ file: string; message: string; error?: Error }> = [];
+    let cachedFilesCount = 0;
+    let analyzedFilesCount = 0;
 
     for (const [filePath, code] of files.entries()) {
+      if (!this.shouldAnalyzeFile(filePath, cfg)) {
+        continue;
+      }
+
+      const normPath = this.normalizePath(filePath);
+
+      if (cfg.incremental) {
+        const hash = this.computeHash(code);
+        const cached = this.fileCache.get(normPath);
+        if (cached && cached.hash === hash) {
+          allFindings.push(...cached.findings);
+          cachedFilesCount++;
+          continue;
+        }
+      }
+
       try {
-        const result = await this.analyze(code, filePath, config);
+        const result = await this.analyze(code, filePath, cfg);
         allFindings.push(...result.findings);
         if (result.errors) {
           errors.push(...result.errors);
+        }
+        analyzedFilesCount++;
+
+        if (cfg.incremental) {
+          this.fileCache.set(normPath, {
+            hash: this.computeHash(code),
+            findings: result.findings,
+            totalEstimatedGasSavings: result.totalEstimatedGasSavings,
+            timestamp: Date.now(),
+          });
         }
       } catch (error) {
         errors.push({
@@ -171,15 +337,26 @@ export abstract class BaseAnalyzer implements Analyzer {
     }
 
     const analysisTime = Date.now() - startTime;
+    const memoryUsage = cfg.reportMemoryUsage
+      ? this.captureMemoryUsage(startMemory)
+      : undefined;
 
     return {
       findings: allFindings,
-      filesAnalyzed: files.size,
+      filesAnalyzed: analyzedFilesCount + cachedFilesCount,
       analysisTime,
       analyzerVersion: this.getVersion(),
       summary: this.calculateSummary(allFindings),
       totalEstimatedGasSavings: this.calculateTotalGasSavings(allFindings),
       errors: errors.length > 0 ? errors : undefined,
+      memoryUsage,
+      incremental: cfg.incremental
+        ? {
+            cachedFiles: cachedFilesCount,
+            analyzedFiles: analyzedFilesCount,
+            totalFiles: files.size,
+          }
+        : undefined,
     };
   }
 
@@ -220,6 +397,7 @@ export abstract class BaseAnalyzer implements Analyzer {
 
   async dispose(): Promise<void> {
     this.initialized = false;
+    this.fileCache.clear();
   }
 
   protected calculateSummary(findings: Finding[]): AnalysisResult["summary"] {
@@ -246,8 +424,22 @@ export abstract class BaseAnalyzer implements Analyzer {
   ): boolean {
     const cfg = config || this.config;
 
+    if (cfg.changedFilesOnly) {
+      const changed = (cfg.changedFiles ?? []).map((p) =>
+        this.normalizePath(p),
+      );
+      const normPath = this.normalizePath(filePath);
+      if (!changed.includes(normPath)) {
+        return false;
+      }
+    }
+
     if (cfg.includePaths && cfg.includePaths.length > 0) {
-      if (!cfg.includePaths.some((pattern) => this.matchesPattern(filePath, pattern))) {
+      if (
+        !cfg.includePaths.some((pattern) =>
+          this.matchesPattern(filePath, pattern),
+        )
+      ) {
         return false;
       }
     }
@@ -266,8 +458,8 @@ export abstract class BaseAnalyzer implements Analyzer {
   }
 
   private matchesPattern(path: string, pattern: string): boolean {
-    const normalizedPath = path.replace(/\\/g, "/").replace(/^\.\//, "");
-    const normalizedPattern = pattern.replace(/\\/g, "/").replace(/^\.\//, "");
+    const normalizedPath = this.normalizePath(path);
+    const normalizedPattern = this.normalizePath(pattern);
     const anchored = normalizedPattern.startsWith("/");
     const source = normalizedPattern
       .replace(/^\//, "")
